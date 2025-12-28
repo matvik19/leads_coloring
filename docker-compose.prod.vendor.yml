@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    command: python manage.py run-prod-server
+    volumes:
+      - ./logs:/logs
+    ports:
+      - "127.0.0.1:8010:8000"
+    env_file:
+      - .env
+    networks:
+      - vendor-network
+
+  taskiq_scheduler_app:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    command: python manage.py run-scheduler
+    volumes:
+      - ./logs:/logs
+    env_file:
+      - .env
+    networks:
+      - vendor-network
+
+  taskiq_broker_app:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    command: python manage.py run-worker
+    volumes:
+      - ./logs:/logs
+    env_file:
+      - .env
+    networks:
+      - vendor-network
+
+networks:
+  vendor-network:
+    external: true
+    name: 'vendor-network'

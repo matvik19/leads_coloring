@@ -1,0 +1,35 @@
+services:
+  app:
+    build:
+      context: ./src
+      dockerfile: Dockerfile.dev
+    command: python manage.py run-dev-server
+    volumes:
+      - ./src:/home
+      - ./logs:/logs
+    ports:
+      - 8000:8000
+    env_file:
+      - .env
+
+  taskiq_scheduler_app:
+    build:
+      context: ./src
+      dockerfile: Dockerfile.dev
+    command: python manage.py run-scheduler
+    volumes:
+      - ./src:/home
+      - ./logs:/logs
+    env_file:
+      - .env
+
+  taskiq_broker_app:
+    build:
+      context: ./src
+      dockerfile: Dockerfile.dev
+    command: python manage.py run-worker --devel=y
+    volumes:
+      - ./src:/home
+      - ./logs:/logs
+    env_file:
+      - .env

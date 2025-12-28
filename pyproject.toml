@@ -1,0 +1,82 @@
+[project]
+name = "base-ms-template"
+version = "0.1.0"
+description = "Base microservice template"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aio-pika==9.5.5",
+    "aiocache==0.12.3",
+    "aiormq==6.8.1",
+    "alembic==1.16.2",
+    "annotated-types==0.7.0",
+    "anyio==4.9.0",
+    "asyncmy==0.2.10",
+    "certifi==2025.6.15",
+    "click==8.2.1",
+    "exceptiongroup==1.3.0",
+    "fastapi==0.115.14",
+    "greenlet==3.2.3",
+    "gunicorn==23.0.0",
+    "h11==0.16.0",
+    "httpcore==1.0.9",
+    "httpx==0.28.1",
+    "idna==3.10",
+    "importlib-metadata==8.7.0",
+    "izulu==0.50.0",
+    "mako==1.3.10",
+    "markupsafe==3.0.2",
+    "multidict==6.5.1",
+    "packaging==25.0",
+    "pamqp==3.3.0",
+    "propcache==0.3.2",
+    "pycron==3.2.0",
+    "pydantic==2.11.7",
+    "pydantic-core==2.33.2",
+    "pydantic-settings==2.10.1",
+    "pyjwt==2.9.0",
+    "python-dotenv==1.1.1",
+    "pytz==2025.2",
+    "redis==5.3.0",
+    "sniffio==1.3.1",
+    "sqlalchemy==2.0.41",
+    "starlette==0.46.2",
+    "starlette-context==0.4.0",
+    "taskiq==0.11.17",
+    "taskiq-aio-pika==0.4.2",
+    "taskiq-dependencies==1.5.7",
+    "taskiq-redis==1.0.9",
+    "typing-extensions==4.14.0",
+    "typing-inspection==0.4.1",
+    "uvicorn==0.34.3",
+    "yarl==1.20.1",
+    "zipp==3.23.0",
+]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0",
+    "mypy>=1.18.2",
+    "pylint>=3.3.9",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-mock>=3.15.1",
+]
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+pythonpath = ["src"]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+ignore_missing_imports = true
+strict_optional = true
