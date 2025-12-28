@@ -2,82 +2,111 @@
 
 Микросервис для управления правилами окраски лидов в AmoCRM.
 
-## Описание
-
-Этот микросервис предоставляет API для:
-- Создания и управления правилами окраски лидов
-- Проверки условий и применения стилей к лидам
-- Получения полей сделок из AmoCRM
-- Тестирования правил
-
 ## Технологический стек
 
 - **FastAPI** - REST API framework
 - **FastStream** (RabbitMQ) - обработка сообщений из очередей
 - **PostgreSQL** - хранение правил
-- **SQLAlchemy** - ORM
-- **Alembic** - миграции БД
+- **SQLAlchemy** + **Alembic** - ORM и миграции БД
 - **aiohttp** - асинхронные HTTP запросы к AmoCRM API
-- **Pydantic** - валидация данных
+- **Pydantic Settings** - управление конфигурацией
 
 ## Структура проекта
 
 ```
-leads_coloring/
-├── src/
-│   ├── common/          # Общие модули (config, database, logging)
-│   ├── amocrm/          # Работа с AmoCRM API (rate limiting, requests)
-│   ├── broker/          # FastStream конфигурация (middlewares, routers)
-│   ├── rules/           # Модели и логика правил окраски
-│   └── conditions/      # Evaluator для проверки условий
-├── migrations/          # Миграции базы данных (Alembic)
-├── main.py             # Точка входа FastAPI
-├── broker_app.py       # Точка входа FastStream worker
-├── requirements.txt    # Зависимости Python
-├── Dockerfile          # Docker образ
-└── docker-compose.yml  # Конфигурация Docker Compose
+src/
+├── app/
+│   ├── api/api_v1/endpoints/  # REST API endpoints
+│   ├── commands/              # CLI команды
+│   ├── core/                  # Настройки, логирование, broker
+│   ├── db/                    # База данных
+│   ├── models/                # SQLAlchemy модели
+│   ├── schemas/               # Pydantic схемы
+│   ├── services/              # Бизнес-логика
+│   ├── amocrm/                # AmoCRM API интеграция
+│   └── utils/                 # Утилиты
+├── alembic/                   # Миграции БД
+├── manage.py                  # CLI точка входа
+└── requirements.txt
 ```
 
 ## API Endpoints
 
 ### Управление правилами
-
-- `GET /api/deal-fields` - Получение списка полей сделок
-- `POST /api/rules` - Создание правила
-- `PUT /api/rules/{id}` - Обновление правила
-- `GET /api/rules` - Получение списка правил
-- `DELETE /api/rules/{id}` - Удаление правила
-- `PUT /api/rules/priorities` - Обновление приоритетов правил
+- `GET /api/v1/deal-fields` - Получение списка полей сделок
+- `POST /api/v1/rules` - Создание правила
+- `PUT /api/v1/rules/{id}` - Обновление правила
+- `GET /api/v1/rules` - Получение списка правил
+- `DELETE /api/v1/rules/{id}` - Удаление правила
+- `PUT /api/v1/rules/priorities` - Обновление приоритетов
 
 ### Применение стилей
-
-- `POST /api/leads/styles` - Получение стилей для списка лидов
+- `POST /api/v1/leads/styles` - Получение стилей для лидов
 
 ### Тестирование
+- `POST /api/v1/rules/test` - Тестирование правила
 
-- `POST /api/rules/test` - Тестирование правила на данных лида
+### Служебные
+- `GET /api/v1/health` - Health check
 
-## Установка и запуск
+## Запуск
+
+### CLI команды
+
+```bash
+# Development сервер с auto-reload
+python manage.py run-dev-server
+
+# Production сервер через Gunicorn
+python manage.py run-prod-server
+
+# FastStream worker
+python manage.py run-worker --devel
+```
 
 ### Docker
 
-1. Создать `.env-non-dev` файл с переменными окружения
-2. Запустить через docker-compose:
-
 ```bash
-docker-compose up -d
+# Development
+docker-compose -f docker-compose.dev.vendor.yml up --build
+
+# Production
+docker-compose up --build
 ```
+
+## Конфигурация
+
+Все настройки через переменные окружения (см. `.env.example`):
+- `DB_*` - PostgreSQL
+- `RABBITMQ_*` - RabbitMQ
+- `AMOCRM_*` - AmoCRM интеграция
+- `WEB_*` - Gunicorn
+- `WORKER_*` - FastStream воркер
+- `APP_*` - Приложение
 
 ## Операторы условий
 
 ### Текстовые поля
-- equals, not_equals, contains, not_contains, starts_with, ends_with, is_empty, is_not_empty
+equals, not_equals, contains, not_contains, starts_with, ends_with, is_empty, is_not_empty
 
 ### Числовые поля
-- equals, not_equals, greater_than, less_than, greater_or_equal, less_or_equal, between, is_empty, is_not_empty
+equals, not_equals, greater_than, less_than, greater_or_equal, less_or_equal, between
 
 ### Даты
-- equals, not_equals, after, before, today, yesterday, this_week, last_week, this_month, last_month, last_n_days
+equals, not_equals, after, before, today, yesterday, this_week, last_week, this_month, last_month, last_n_days
 
 ### Списки
-- equals, not_equals, in_list, not_in_list, is_empty, is_not_empty
+equals, not_equals, in_list, not_in_list
+
+## Миграции БД
+
+```bash
+# Создать миграцию
+cd src && alembic revision --autogenerate -m "Description"
+
+# Применить миграции
+cd src && alembic upgrade head
+
+# Откатить миграцию
+cd src && alembic downgrade -1
+```

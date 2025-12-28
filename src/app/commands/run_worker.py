@@ -26,7 +26,7 @@ def run_worker(devel: bool = False):
         args.append("--reload")
     else:
         args.append("--workers")
-        args.append(str(config.tasks_cfg.WORKERS))
+        args.append(str(config.worker_cfg.WORKERS))
 
     proc = subprocess.Popen(args)
     while not exit_signal:

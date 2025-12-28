@@ -18,7 +18,7 @@ broker = RabbitBroker(
         RetryMiddleware,  # Сначала retry (внешний слой)
         LoggingMiddleware,  # Потом logging (внутренний слой)
     ],
-    default_channel=Channel(prefetch_count=config.tasks_cfg.PREFETCH_COUNT),
+    default_channel=Channel(prefetch_count=config.worker_cfg.PREFETCH_COUNT),
 )
 
 # Здесь можно добавить роутеры для обработки сообщений из RabbitMQ

@@ -38,28 +38,6 @@ class DBConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
 
 
-class RedisConfig(BaseSettings):
-    """
-    Конфигурация Redis
-    """
-
-    HOST: str = "cache"
-    PORT: int = 6379
-
-    RESULT_INDEX: int = 9
-    CACHE_INDEX: int = 0
-
-    @property
-    def redis_result_uri(self) -> str:
-        return f"redis://{self.HOST}:{self.PORT}/{self.RESULT_INDEX}"
-
-    @property
-    def redis_cache_uri(self) -> str:
-        return f"redis://{self.HOST}:{self.PORT}/{self.CACHE_INDEX}"
-
-    model_config = SettingsConfigDict(env_prefix="REDIS_", env_file=".env", extra="ignore")
-
-
 class RabbitConfig(BaseSettings):
     """
     Конфигурация RabbitMQ
@@ -94,16 +72,15 @@ class GunicornConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="WEB_", env_file=".env", extra="ignore")
 
 
-class BackgroundTasksConfig(BaseSettings):
+class WorkerConfig(BaseSettings):
     """
-    Конфигурация фоновых задач FastStream
+    Конфигурация FastStream воркера
     """
 
     WORKERS: int = 1
-    MAX_TASKS_PER_CHILD: int = 2500
     PREFETCH_COUNT: int = 10
 
-    model_config = SettingsConfigDict(env_prefix="TASK_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="WORKER_", env_file=".env", extra="ignore")
 
 
 class AmoCRMConfig(BaseSettings):
@@ -146,10 +123,9 @@ class Settings(BaseSettings):
     """
 
     db_cfg: DBConfig = DBConfig()
-    redis_cfg: RedisConfig = RedisConfig()
     rabbit_cfg: RabbitConfig = RabbitConfig()
     web_cfg: GunicornConfig = GunicornConfig()
-    tasks_cfg: BackgroundTasksConfig = BackgroundTasksConfig()
+    worker_cfg: WorkerConfig = WorkerConfig()
     amocrm_cfg: AmoCRMConfig = AmoCRMConfig()
     app_cfg: AppConfig = AppConfig()
 
