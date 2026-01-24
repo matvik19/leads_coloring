@@ -8,6 +8,10 @@ from app.core.settings import config
 from app.core.logging import logger
 from app.core.broker.middlewares.logging_middleware import LoggingMiddleware
 from app.core.broker.middlewares.retry_middleware import RetryMiddleware
+from app.core.broker.routers.rules import rules_router
+from app.core.broker.routers.leads import leads_router
+from app.core.broker.routers.fields import fields_router
+from app.core.broker.routers.health import health_router
 
 
 # Создаем RabbitMQ брокер с настройками
@@ -21,7 +25,8 @@ broker = RabbitBroker(
     default_channel=Channel(prefetch_count=config.worker_cfg.PREFETCH_COUNT),
 )
 
-# Здесь можно добавить роутеры для обработки сообщений из RabbitMQ
-# Например:
-# from app.broker.routers.coloring import coloring_router
-# broker.include_router(coloring_router)
+# Подключаем роутеры для обработки сообщений из RabbitMQ
+broker.include_router(rules_router)
+broker.include_router(leads_router)
+broker.include_router(fields_router)
+broker.include_router(health_router)

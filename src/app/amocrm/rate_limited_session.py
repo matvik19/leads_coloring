@@ -4,7 +4,7 @@
 
 from typing import Any, Optional
 from aiohttp import ClientSession, ClientResponse
-from src.amocrm.rate_limiter import amocrm_rate_limiter
+from app.amocrm.rate_limiter import amocrm_rate_limiter
 
 
 class RateLimitedClientSession:
