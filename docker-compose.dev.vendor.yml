@@ -16,7 +16,7 @@ services:
     build:
       context: ./src
       dockerfile: Dockerfile
-    command: python manage.py run-worker --devel
+    command: python manage.py run-worker -d
     volumes:
       - ./src:/home
       - ./logs:/logs

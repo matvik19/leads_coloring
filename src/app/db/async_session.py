@@ -64,6 +64,9 @@ async def wait_for_db():
 
 async def run_migrations():
     """Запускаем Alembic миграции."""
+    import os
     logger.info("Running database migrations...")
-    subprocess.run("alembic upgrade head", shell=True, check=True, cwd="/home")
+    # Определяем путь к директории src где находится alembic.ini
+    src_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    subprocess.run("alembic upgrade head", shell=True, check=True, cwd=src_dir)
     logger.info("Migrations completed.")
