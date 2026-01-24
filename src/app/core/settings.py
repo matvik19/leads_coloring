@@ -78,6 +78,7 @@ class WorkerConfig(BaseSettings):
     """
 
     WORKERS: int = 1
+    MAX_TASKS_PER_CHILD: int = 2500
     PREFETCH_COUNT: int = 10
 
     model_config = SettingsConfigDict(env_prefix="WORKER_", env_file=".env", extra="ignore")
