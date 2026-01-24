@@ -13,6 +13,7 @@ from app.core.logging import logger
 from app.schemas.coloring import DealField
 from app.amocrm.requests_amocrm import get_custom_fields_for_leads
 from app.amocrm.rate_limited_session import RateLimitedClientSession
+from app.utils.tokens import get_tokens_from_service, get_headers
 
 
 fields_router = RabbitRouter()
@@ -29,7 +30,7 @@ async def handle_get_deal_fields(
     Получение списка полей сделок из AmoCRM.
 
     Args:
-        data: Данные из RabbitMQ сообщения (subdomain, access_token)
+        data: Данные из RabbitMQ сообщения (subdomain)
         http_session: HTTP клиент с rate limiting (DI)
 
     Returns:
@@ -37,15 +38,18 @@ async def handle_get_deal_fields(
     """
     try:
         subdomain = data.get("subdomain")
-        access_token = data.get("access_token")
 
-        if not subdomain or not access_token:
+        if not subdomain:
             return {
                 "success": False,
-                "error": "subdomain and access_token are required"
+                "error": "subdomain is required"
             }
 
-        headers = {"Authorization": f"Bearer {access_token}"}
+        # Получаем токены из сервиса токенов через RPC
+        tokens = await get_tokens_from_service(subdomain)
+
+        # Формируем headers с токеном доступа
+        headers = await get_headers(subdomain, tokens["access_token"])
 
         # Стандартные поля лидов
         standard_fields = [

@@ -24,6 +24,7 @@ src/app/core/broker/
 ├── app.py                      # Конфигурация брокера
 ├── config.py                   # Имена очередей и настройки
 ├── dependencies.py             # DI для handlers
+├── rpc.py                      # RPC клиент для сервиса токенов
 ├── middlewares/
 │   ├── logging_middleware.py  # Логирование + context
 │   └── retry_middleware.py    # Retry логика
@@ -32,6 +33,9 @@ src/app/core/broker/
     ├── leads.py               # Операции с лидами
     ├── fields.py              # Получение полей сделок
     └── health.py              # Healthcheck
+
+src/app/utils/
+└── tokens.py                   # Утилиты для получения токенов AmoCRM
 ```
 
 ## Маппинг endpoints → queues
@@ -121,6 +125,105 @@ async def get_http_session() -> AsyncGenerator[RateLimitedClientSession, None]:
         yield rate_limited_session
 ```
 
+## Управление токенами AmoCRM
+
+### RPC клиент для получения токенов
+
+Токены AmoCRM API получаются **автоматически** через RPC запрос к отдельному сервису токенов. Handlers **не принимают** `access_token` в параметрах.
+
+#### RPC клиент (`src/app/core/broker/rpc.py`)
+
+```python
+async def send_rpc_request_and_wait_for_reply(
+    subdomain: str,
+    client_id: str,
+    timeout: int = 30,
+    max_retries: int = 3,
+) -> Dict[str, Any]:
+    """
+    Отправка RPC запроса в сервис токенов через RabbitMQ.
+
+    - Очередь: tokens_get_user
+    - Timeout: 30 секунд
+    - Retry: 3 попытки с экспоненциальным backoff (0.5s, 1s, 2s)
+    - Семафор для предотвращения конкурентных вызовов
+    """
+    async with _rpc_semaphore:  # Предотвращает "reply consumer already set"
+        response = await broker.request(
+            message={"subdomain": subdomain, "client_id": client_id},
+            queue="tokens_get_user",
+            timeout=timeout,
+        )
+        return json.loads(response.body)
+```
+
+#### Утилиты для работы с токенами (`src/app/utils/tokens.py`)
+
+```python
+async def get_tokens_from_service(subdomain: str) -> Dict[str, str]:
+    """Получение токенов из сервиса через RPC"""
+    client_id = config.amocrm_cfg.CLIENT_ID
+    tokens = await send_rpc_request_and_wait_for_reply(subdomain, client_id)
+
+    # Валидация токенов
+    if not tokens.get("access_token") or not tokens.get("refresh_token"):
+        raise ValueError("Invalid tokens received")
+
+    return tokens
+
+async def get_headers(subdomain: str, access_token: str) -> Dict[str, str]:
+    """Формирование HTTP заголовков для AmoCRM API"""
+    return {
+        "Host": f"{subdomain}.amocrm.ru",
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+    }
+```
+
+#### Использование в handlers
+
+```python
+@router.subscriber(RabbitQueue(QueueNames.LEADS_STYLES, durable=True))
+async def handle_get_leads_styles(
+    data: dict,
+    db_session: Annotated[AsyncSession, Depends(get_db_session)],
+    http_session: Annotated[RateLimitedClientSession, Depends(get_http_session)],
+) -> Dict[str, Any]:
+    subdomain = data["subdomain"]
+
+    # 1. Автоматическое получение токенов через RPC
+    tokens = await get_tokens_from_service(subdomain)
+
+    # 2. Формирование headers
+    headers = await get_headers(subdomain, tokens["access_token"])
+
+    # 3. Использование токена для API запросов
+    leads_data = await get_leads_by_ids(lead_ids, subdomain, headers, http_session)
+```
+
+### Формат RPC сообщений для токенов
+
+**Запрос в очередь `tokens_get_user`:**
+```json
+{
+  "subdomain": "example",
+  "client_id": "значение из AMOCRM_CLIENT_ID"
+}
+```
+
+**Ответ от сервиса токенов:**
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI...",
+  "refresh_token": "def5020012345..."
+}
+```
+
+**Важно:**
+- Кеширование токенов происходит в сервисе токенов
+- Каждый handler делает RPC запрос при необходимости
+- Семафор предотвращает одновременные RPC вызовы
+
 ## Формат сообщений
 
 ### Запрос на создание правила
@@ -160,6 +263,36 @@ async def get_http_session() -> AsyncGenerator[RateLimitedClientSession, None]:
 {
   "success": false,
   "error": "Описание ошибки"
+}
+```
+
+### Запрос на получение стилей для лидов
+```json
+{
+  "subdomain": "example",
+  "lead_ids": [123, 456, 789]
+}
+```
+**Примечание:** `access_token` НЕ передается - получается автоматически через RPC из сервиса токенов.
+
+### Ответ со стилями
+```json
+{
+  "success": true,
+  "styles": {
+    "123": {
+      "text_color": "#FFFFFF",
+      "background_color": "#FF0000",
+      "matched_rule_id": 5,
+      "matched_rule_name": "Высокий бюджет"
+    },
+    "456": {
+      "text_color": "#000000",
+      "background_color": "#FFFF00",
+      "matched_rule_id": 3,
+      "matched_rule_name": "Новый лид"
+    }
+  }
 }
 ```
 

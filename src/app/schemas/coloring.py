@@ -103,7 +103,6 @@ class GetStylesRequest(BaseModel):
     """Запрос на получение стилей для лидов"""
     subdomain: str = Field(..., description="Субдомен AmoCRM")
     lead_ids: List[int] = Field(..., description="Список ID лидов")
-    access_token: str = Field(..., description="Токен доступа к AmoCRM API")
 
 
 class GetStylesResponse(BaseModel):

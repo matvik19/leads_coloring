@@ -16,6 +16,7 @@ from app.services.coloring_service import get_active_rules_by_subdomain
 from app.services.condition_evaluator import evaluate_conditions
 from app.amocrm.requests_amocrm import get_leads_by_ids
 from app.amocrm.rate_limited_session import RateLimitedClientSession
+from app.utils.tokens import get_tokens_from_service, get_headers
 
 
 leads_router = RabbitRouter()
@@ -33,7 +34,7 @@ async def handle_get_leads_styles(
     Получение стилей для лидов на основе правил.
 
     Args:
-        data: Данные из RabbitMQ сообщения (subdomain, lead_ids, access_token)
+        data: Данные из RabbitMQ сообщения (subdomain, lead_ids)
         db_session: Сессия базы данных (DI)
         http_session: HTTP клиент с rate limiting (DI)
 
@@ -60,8 +61,11 @@ async def handle_get_leads_styles(
                 "styles": {}
             }
 
-        # Получаем данные лидов из AmoCRM
-        headers = {"Authorization": f"Bearer {request.access_token}"}
+        # Получаем токены из сервиса токенов через RPC
+        tokens = await get_tokens_from_service(request.subdomain)
+
+        # Формируем headers с токеном доступа
+        headers = await get_headers(request.subdomain, tokens["access_token"])
 
         try:
             leads_data = await get_leads_by_ids(
