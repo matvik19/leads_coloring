@@ -1,15 +1,19 @@
 ###########
 # BUILDER #
 ###########
-FROM python:3.12-slim as builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /usr/src/app
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-RUN apt update
-RUN apt -y install build-essential libpq-dev
+# Объединяем apt update и install для избежания кэширования устаревших индексов
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip
 COPY requirements.txt .
@@ -21,8 +25,13 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requir
 
 FROM python:3.12-slim
 
-RUN apt update
-RUN apt -y install netcat-traditional libpq-dev
+# Объединяем apt update и install + очистка кэша
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        netcat-traditional \
+        libpq-dev \
+        libpq5 && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /home/app
 
