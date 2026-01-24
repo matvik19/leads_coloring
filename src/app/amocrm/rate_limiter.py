@@ -10,7 +10,7 @@ import time
 from typing import Optional
 from contextlib import asynccontextmanager
 
-from src.common.log_config import logger
+from app.core.logging import logger
 
 
 class AmoCRMRateLimiter:

@@ -6,8 +6,7 @@ from fastapi import HTTPException
 
 import aiohttp
 
-from src.common.log_config import logger
-from src.amocrm.rate_limiter import rate_limited_request, retry_on_429
+from app.core.logging import logger
 
 
 async def get_client_session() -> AsyncGenerator[aiohttp.ClientSession, None]:
