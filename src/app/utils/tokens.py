@@ -1,23 +1,32 @@
 """
-Утилиты для работы с токенами AmoCRM через сервис токенов.
+Утилиты для работы с токенами AmoCRM через сервис токенов с кешированием.
 """
 
-from typing import Dict
+import time
+from typing import Dict, Optional
 
 from app.core.broker.rpc import send_rpc_request_and_wait_for_reply
 from app.core.settings import config
 from app.core.logging import logger
 
 
-async def get_tokens_from_service(subdomain: str) -> Dict[str, str]:
-    """
-    Получение токенов AmoCRM для указанного субдомена через RPC.
+# Локальный кеш токенов {subdomain: {tokens, expires_at}}
+_tokens_cache: Dict[str, Dict] = {}
 
-    Отправляет асинхронный запрос в сервис токенов через RabbitMQ
-    и ожидает получения access_token и refresh_token.
+# TTL для кеша токенов в секундах (например, 50 минут, токены живут 1 час)
+TOKEN_CACHE_TTL = 50 * 60
+
+
+async def get_tokens_from_service(subdomain: str, force_refresh: bool = False) -> Dict[str, str]:
+    """
+    Получение токенов AmoCRM для указанного субдомена через RPC с кешированием.
+
+    Использует локальный кеш для минимизации RPC запросов к сервису токенов.
+    Токены кешируются на 50 минут (при TTL токена 60 минут).
 
     Args:
         subdomain: Субдомен AmoCRM (например, "example" для example.amocrm.ru)
+        force_refresh: Принудительно обновить токены, игнорируя кеш
 
     Returns:
         Dict с ключами:
@@ -33,6 +42,29 @@ async def get_tokens_from_service(subdomain: str) -> Dict[str, str]:
         >>> access_token = tokens["access_token"]
         >>> refresh_token = tokens["refresh_token"]
     """
+    # Проверяем кеш, если не требуется принудительное обновление
+    if not force_refresh and subdomain in _tokens_cache:
+        cached = _tokens_cache[subdomain]
+        current_time = time.time()
+
+        # Если токены еще валидны
+        if current_time < cached["expires_at"]:
+            logger.debug(
+                "Используем кешированные токены для subdomain=%s (TTL: %s сек)",
+                subdomain,
+                int(cached["expires_at"] - current_time)
+            )
+            return {
+                "access_token": cached["access_token"],
+                "refresh_token": cached["refresh_token"],
+            }
+        else:
+            logger.debug(
+                "Кешированные токены для subdomain=%s истекли, обновляем",
+                subdomain
+            )
+
+    # Получаем токены из сервиса через RPC
     try:
         logger.info("Запрашиваем токены в сервисе токенов для subdomain=%s", subdomain)
 
@@ -44,6 +76,8 @@ async def get_tokens_from_service(subdomain: str) -> Dict[str, str]:
             raise ValueError("AmoCRM CLIENT_ID is not configured")
 
         # Отправляем RPC запрос в сервис токенов
+        # Семафор внутри send_rpc_request_and_wait_for_reply обеспечивает
+        # последовательное выполнение RPC запросов
         tokens = await send_rpc_request_and_wait_for_reply(
             subdomain=subdomain,
             client_id=client_id,
@@ -54,8 +88,23 @@ async def get_tokens_from_service(subdomain: str) -> Dict[str, str]:
             logger.error("Получены невалидные токены для subdomain=%s", subdomain)
             raise ValueError("Invalid tokens received from token service")
 
-        logger.info("Токены успешно получены для subdomain=%s", subdomain)
-        return tokens
+        # Сохраняем в кеш
+        _tokens_cache[subdomain] = {
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+            "expires_at": time.time() + TOKEN_CACHE_TTL,
+        }
+
+        logger.info(
+            "Токены успешно получены и закешированы для subdomain=%s (TTL: %s мин)",
+            subdomain,
+            TOKEN_CACHE_TTL // 60
+        )
+
+        return {
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+        }
 
     except Exception as e:
         logger.error(
@@ -65,6 +114,26 @@ async def get_tokens_from_service(subdomain: str) -> Dict[str, str]:
             exc_info=True
         )
         raise
+
+
+def clear_token_cache(subdomain: Optional[str] = None):
+    """
+    Очистка кеша токенов.
+
+    Args:
+        subdomain: Субдомен для очистки. Если None - очищается весь кеш.
+
+    Example:
+        >>> clear_token_cache("example")  # Очистить для одного субдомена
+        >>> clear_token_cache()  # Очистить весь кеш
+    """
+    if subdomain:
+        if subdomain in _tokens_cache:
+            del _tokens_cache[subdomain]
+            logger.info("Кеш токенов очищен для subdomain=%s", subdomain)
+    else:
+        _tokens_cache.clear()
+        logger.info("Кеш токенов полностью очищен")
 
 
 async def get_headers(subdomain: str, access_token: str) -> Dict[str, str]:
