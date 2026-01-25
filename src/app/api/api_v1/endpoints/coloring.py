@@ -6,7 +6,7 @@ from aiohttp import ClientSession
 
 from app.db.async_session import get_session
 from app.core.logging import logger
-from app.amocrm.requests_amocrm import get_client_session, get_custom_fields_for_leads, get_leads_by_ids
+from app.amocrm.requests_amocrm import get_client_session, get_leads_by_ids
 from app.schemas.coloring import (
     CreateRuleRequest,
     CreateRuleResponse,
@@ -20,8 +20,6 @@ from app.schemas.coloring import (
     GetStylesResponse,
     TestRuleRequest,
     TestRuleResponse,
-    GetDealFieldsResponse,
-    DealField,
     LeadStyle,
 )
 from app.services.coloring_service import (
@@ -35,65 +33,6 @@ from app.services.coloring_service import (
 from app.services.condition_evaluator import evaluate_conditions
 
 router = APIRouter(prefix="/api", tags=["Rules"])
-
-
-@router.get("/deal-fields", response_model=GetDealFieldsResponse)
-async def get_deal_fields(
-    subdomain: str = Query(..., description="Субдомен AmoCRM"),
-    access_token: str = Query(..., description="Токен доступа AmoCRM"),
-    client_session: ClientSession = Depends(get_client_session)
-):
-    """
-    Получение списка полей сделок из AmoCRM.
-
-    Возвращает стандартные и кастомные поля для использования в правилах.
-    """
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    # Стандартные поля лидов
-    standard_fields = [
-        DealField(id="name", name="Название", type="string"),
-        DealField(id="price", name="Бюджет", type="number"),
-        DealField(id="status_id", name="Статус", type="enum"),
-        DealField(id="pipeline_id", name="Воронка", type="enum"),
-        DealField(id="responsible_user_id", name="Ответственный", type="enum"),
-        DealField(id="created_at", name="Дата создания", type="date"),
-        DealField(id="updated_at", name="Дата изменения", type="date"),
-        DealField(id="closed_at", name="Дата закрытия", type="date"),
-    ]
-
-    # Получаем кастомные поля
-    try:
-        custom_fields_data = await get_custom_fields_for_leads(subdomain, headers, client_session)
-
-        custom_fields = []
-        for field in custom_fields_data:
-            field_type = "string"
-            if field.get("type") == "numeric":
-                field_type = "number"
-            elif field.get("type") == "date":
-                field_type = "date"
-            elif field.get("type") in ["select", "multiselect", "radiobutton"]:
-                field_type = "enum"
-            elif field.get("type") == "checkbox":
-                field_type = "boolean"
-
-            custom_fields.append(
-                DealField(
-                    id=str(field.get("id")),
-                    name=field.get("name", ""),
-                    type=field_type
-                )
-            )
-
-        all_fields = standard_fields + custom_fields
-        logger.info("Получено %s полей для subdomain=%s", len(all_fields), subdomain)
-
-        return GetDealFieldsResponse(fields=all_fields)
-
-    except Exception as e:
-        logger.error("Ошибка при получении полей: %s", e)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch fields: {str(e)}")
 
 
 @router.post("/rules", response_model=CreateRuleResponse)

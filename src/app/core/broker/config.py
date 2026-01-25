@@ -6,9 +6,6 @@
 class QueueNames:
     """Имена очередей для обработки операций с правилами окраски"""
 
-    # Операции с полями сделок
-    DEAL_FIELDS_GET = "leads_coloring_deal_fields"
-
     # Операции с правилами
     RULES_CREATE = "leads_coloring_rules_create"
     RULES_UPDATE = "leads_coloring_rules_update"
