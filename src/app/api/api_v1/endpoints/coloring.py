@@ -32,7 +32,7 @@ from app.services.coloring_service import (
 )
 from app.services.condition_evaluator import evaluate_conditions
 
-router = APIRouter(prefix="/api", tags=["Rules"])
+router = APIRouter(prefix="/api")
 
 
 @router.post("/rules", response_model=CreateRuleResponse)
