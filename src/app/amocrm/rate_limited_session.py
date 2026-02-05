@@ -2,9 +2,30 @@
 Обертка для aiohttp.ClientSession с автоматическим rate limiting.
 """
 
-from typing import Any, Optional
-from aiohttp import ClientSession, ClientResponse
+from typing import Any
+from aiohttp import ClientSession
 from app.amocrm.rate_limiter import amocrm_rate_limiter
+
+
+class RateLimitedContextManager:
+    """
+    Context manager для запросов с rate limiting.
+    Позволяет использовать `async with session.get(...) as response`.
+    """
+
+    def __init__(self, coro):
+        self._coro = coro
+        self._response = None
+
+    async def __aenter__(self):
+        await amocrm_rate_limiter.acquire()
+        self._response = await self._coro
+        return self._response
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._response is not None:
+            self._response.release()
+        return False
 
 
 class RateLimitedClientSession:
@@ -21,30 +42,25 @@ class RateLimitedClientSession:
         """
         self._session = session
 
-    async def get(self, url: str, **kwargs) -> ClientResponse:
+    def get(self, url: str, **kwargs) -> RateLimitedContextManager:
         """GET запрос с rate limiting."""
-        await amocrm_rate_limiter.acquire()
-        return await self._session.get(url, **kwargs)
+        return RateLimitedContextManager(self._session.get(url, **kwargs))
 
-    async def post(self, url: str, **kwargs) -> ClientResponse:
+    def post(self, url: str, **kwargs) -> RateLimitedContextManager:
         """POST запрос с rate limiting."""
-        await amocrm_rate_limiter.acquire()
-        return await self._session.post(url, **kwargs)
+        return RateLimitedContextManager(self._session.post(url, **kwargs))
 
-    async def patch(self, url: str, **kwargs) -> ClientResponse:
+    def patch(self, url: str, **kwargs) -> RateLimitedContextManager:
         """PATCH запрос с rate limiting."""
-        await amocrm_rate_limiter.acquire()
-        return await self._session.patch(url, **kwargs)
+        return RateLimitedContextManager(self._session.patch(url, **kwargs))
 
-    async def put(self, url: str, **kwargs) -> ClientResponse:
+    def put(self, url: str, **kwargs) -> RateLimitedContextManager:
         """PUT запрос с rate limiting."""
-        await amocrm_rate_limiter.acquire()
-        return await self._session.put(url, **kwargs)
+        return RateLimitedContextManager(self._session.put(url, **kwargs))
 
-    async def delete(self, url: str, **kwargs) -> ClientResponse:
+    def delete(self, url: str, **kwargs) -> RateLimitedContextManager:
         """DELETE запрос с rate limiting."""
-        await amocrm_rate_limiter.acquire()
-        return await self._session.delete(url, **kwargs)
+        return RateLimitedContextManager(self._session.delete(url, **kwargs))
 
     def __getattr__(self, name: str) -> Any:
         """Проксируем все остальные атрибуты к оригинальной сессии."""
