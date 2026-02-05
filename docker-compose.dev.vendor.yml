@@ -2,7 +2,7 @@ services:
   app:
     build:
       context: ./src
-      dockerfile: Dockerfile
+      dockerfile: src/Dockerfile.dev
     command: python manage.py run-dev-server
     volumes:
       - ./src:/home
@@ -15,7 +15,7 @@ services:
   worker_app:
     build:
       context: ./src
-      dockerfile: Dockerfile
+      dockerfile: src/Dockerfile.dev
     command: python manage.py run-worker -d
     volumes:
       - ./src:/home

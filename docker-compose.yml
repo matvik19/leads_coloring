@@ -1,0 +1,40 @@
+version: "3.8"
+services:
+  api:
+    build:
+      context: .
+    env_file:
+      - .env
+    container_name: leads_coloring_api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3011:8000"
+    networks:
+      - leads_coloring_network
+      - postgres_network
+      - rabbitmq_rabbit-net
+      - loki_default
+
+  worker:
+    build:
+      context: .
+    command: faststream run broker_app:app --workers 1
+    env_file:
+      - .env
+    container_name: leads_coloring_worker
+    restart: unless-stopped
+    networks:
+      - leads_coloring_network
+      - postgres_network
+      - rabbitmq_rabbit-net
+      - loki_default
+
+networks:
+  leads_coloring_network:
+    name: leads_coloring_network
+  rabbitmq_rabbit-net:
+    external: true
+  postgres_network:
+    external: true
+  loki_default:
+    external: true

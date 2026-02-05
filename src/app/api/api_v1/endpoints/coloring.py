@@ -1,12 +1,15 @@
-"""REST API роутеры для управления правилами окраски"""
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from aiohttp import ClientSession
+"""
+REST API роутеры для тестирования RabbitMQ через HTTP (RPC прокси).
 
-from app.db.async_session import get_session
+Все ручки отправляют сообщения в RabbitMQ и ждут ответа от worker'а.
+Используются только для тестирования в Swagger UI.
+"""
+from typing import List
+from fastapi import APIRouter, HTTPException, Query
+
 from app.core.logging import logger
-from app.amocrm.requests_amocrm import get_client_session, get_leads_by_ids
+from app.core.broker.app import broker
+from app.core.broker.config import QueueNames
 from app.schemas.coloring import (
     CreateRuleRequest,
     CreateRuleResponse,
@@ -22,60 +25,85 @@ from app.schemas.coloring import (
     TestRuleResponse,
     LeadStyle,
 )
-from app.services.coloring_service import (
-    create_rule,
-    update_rule,
-    get_rules_by_subdomain,
-    delete_rule,
-    update_priorities,
-    get_active_rules_by_subdomain,
-)
-from app.services.condition_evaluator import evaluate_conditions
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["Coloring Rules (RPC Proxy)"])
+
+# Таймаут для RPC запросов (секунды)
+RPC_TIMEOUT = 30.0
 
 
 @router.post("/rules", response_model=CreateRuleResponse)
-async def create_new_rule(
-    request: CreateRuleRequest,
-    session: AsyncSession = Depends(get_session)
-):
+async def create_new_rule(request: CreateRuleRequest):
     """
     Создание нового правила окраски.
+
+    Отправляет запрос в очередь RabbitMQ и ждёт ответа от worker'а.
     """
-    rule = await create_rule(request, session)
-    return CreateRuleResponse(id=rule.id, success=True)
+    logger.info("HTTP -> RabbitMQ RPC: создание правила для subdomain=%s", request.subdomain)
+
+    response = await broker.publish(
+        request.model_dump(),
+        queue=QueueNames.RULES_CREATE,
+        rpc=True,
+        rpc_timeout=RPC_TIMEOUT,
+    )
+
+    if not response.get("success"):
+        raise HTTPException(status_code=400, detail=response.get("error", "Unknown error"))
+
+    return CreateRuleResponse(id=response["id"], success=True)
 
 
 @router.put("/rules/{rule_id}", response_model=CreateRuleResponse)
-async def update_existing_rule(
-    rule_id: int,
-    request: UpdateRuleRequest,
-    session: AsyncSession = Depends(get_session)
-):
+async def update_existing_rule(rule_id: int, request: UpdateRuleRequest):
     """
     Обновление существующего правила.
+
+    Отправляет запрос в очередь RabbitMQ и ждёт ответа от worker'а.
     """
-    rule = await update_rule(rule_id, request, session)
+    logger.info("HTTP -> RabbitMQ RPC: обновление правила id=%s", rule_id)
 
-    if not rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
+    # Добавляем rule_id в данные для worker'а
+    data = request.model_dump()
+    data["rule_id"] = rule_id
 
-    return CreateRuleResponse(id=rule.id, success=True)
+    response = await broker.publish(
+        data,
+        queue=QueueNames.RULES_UPDATE,
+        rpc=True,
+        rpc_timeout=RPC_TIMEOUT,
+    )
+
+    if not response.get("success"):
+        error = response.get("error", "Unknown error")
+        if error == "Rule not found":
+            raise HTTPException(status_code=404, detail=error)
+        raise HTTPException(status_code=400, detail=error)
+
+    return CreateRuleResponse(id=response["id"], success=True)
 
 
 @router.get("/rules", response_model=RulesListResponse)
-async def get_rules(
-    subdomain: str = Query(..., description="Субдомен AmoCRM"),
-    session: AsyncSession = Depends(get_session)
-):
+async def get_rules(subdomain: str = Query(..., description="Субдомен AmoCRM")):
     """
     Получение списка всех правил для субдомена.
+
+    Отправляет запрос в очередь RabbitMQ и ждёт ответа от worker'а.
     """
-    rules = await get_rules_by_subdomain(subdomain, session)
+    logger.info("HTTP -> RabbitMQ RPC: получение правил для subdomain=%s", subdomain)
+
+    response = await broker.publish(
+        {"subdomain": subdomain},
+        queue=QueueNames.RULES_LIST,
+        rpc=True,
+        rpc_timeout=RPC_TIMEOUT,
+    )
+
+    if not response.get("success"):
+        raise HTTPException(status_code=400, detail=response.get("error", "Unknown error"))
 
     return RulesListResponse(
-        rules=[RuleResponse.model_validate(rule) for rule in rules]
+        rules=[RuleResponse.model_validate(rule) for rule in response["rules"]]
     )
 
 
@@ -83,88 +111,82 @@ async def get_rules(
 async def delete_existing_rule(
     rule_id: int,
     subdomain: str = Query(..., description="Субдомен AmoCRM"),
-    session: AsyncSession = Depends(get_session)
 ):
     """
     Удаление правила.
-    """
-    deleted = await delete_rule(rule_id, subdomain, session)
 
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Rule not found")
+    Отправляет запрос в очередь RabbitMQ и ждёт ответа от worker'а.
+    """
+    logger.info("HTTP -> RabbitMQ RPC: удаление правила id=%s, subdomain=%s", rule_id, subdomain)
+
+    response = await broker.publish(
+        {"rule_id": rule_id, "subdomain": subdomain},
+        queue=QueueNames.RULES_DELETE,
+        rpc=True,
+        rpc_timeout=RPC_TIMEOUT,
+    )
+
+    if not response.get("success"):
+        error = response.get("error", "Unknown error")
+        if error == "Rule not found":
+            raise HTTPException(status_code=404, detail=error)
+        raise HTTPException(status_code=400, detail=error)
 
     return DeleteRuleResponse(success=True)
 
 
 @router.put("/rules/priorities", response_model=UpdatePrioritiesResponse)
-async def update_rule_priorities(
-    request: UpdatePrioritiesRequest,
-    session: AsyncSession = Depends(get_session)
-):
+async def update_rule_priorities(request: UpdatePrioritiesRequest):
     """
     Обновление приоритетов правил.
+
+    Отправляет запрос в очередь RabbitMQ и ждёт ответа от worker'а.
     """
-    await update_priorities(request.subdomain, request.priorities, session)
+    logger.info("HTTP -> RabbitMQ RPC: обновление приоритетов для subdomain=%s", request.subdomain)
+
+    response = await broker.publish(
+        request.model_dump(),
+        queue=QueueNames.PRIORITIES_UPDATE,
+        rpc=True,
+        rpc_timeout=RPC_TIMEOUT,
+    )
+
+    if not response.get("success"):
+        raise HTTPException(status_code=400, detail=response.get("error", "Unknown error"))
+
     return UpdatePrioritiesResponse(success=True)
 
 
 @router.post("/leads/styles", response_model=GetStylesResponse)
-async def get_leads_styles(
-    request: GetStylesRequest,
-    session: AsyncSession = Depends(get_session),
-    client_session: ClientSession = Depends(get_client_session)
-):
+async def get_leads_styles(request: GetStylesRequest):
     """
     Получение стилей для лидов на основе правил.
 
+    Отправляет запрос в очередь RabbitMQ и ждёт ответа от worker'а.
     Возвращает только те лиды, которые подходят под правила.
     """
-    logger.info("Запрос стилей для %s лидов, subdomain=%s", len(request.lead_ids), request.subdomain)
+    logger.info(
+        "HTTP -> RabbitMQ RPC: получение стилей для %s лидов, subdomain=%s",
+        len(request.lead_ids),
+        request.subdomain,
+    )
 
-    # Получаем активные правила для субдомена
-    rules = await get_active_rules_by_subdomain(request.subdomain, session)
+    response = await broker.publish(
+        request.model_dump(),
+        queue=QueueNames.LEADS_STYLES,
+        rpc=True,
+        rpc_timeout=RPC_TIMEOUT,
+    )
 
-    if not rules:
-        logger.info("Нет активных правил для subdomain=%s", request.subdomain)
-        return GetStylesResponse(styles={})
+    if not response.get("success"):
+        raise HTTPException(status_code=400, detail=response.get("error", "Unknown error"))
 
-    # Получаем данные лидов из AmoCRM
-    headers = {"Authorization": f"Bearer {request.access_token}"}
+    # Конвертируем dict в LeadStyle объекты
+    styles = {
+        lead_id: LeadStyle(**style_data)
+        for lead_id, style_data in response.get("styles", {}).items()
+    }
 
-    try:
-        leads_data = await get_leads_by_ids(request.lead_ids, request.subdomain, headers, client_session)
-    except Exception as e:
-        logger.error("Ошибка при получении лидов: %s", e)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch leads: {str(e)}")
-
-    # Применяем правила к каждому лиду
-    styles = {}
-
-    for lead_id in request.lead_ids:
-        lead_data = leads_data.get(lead_id)
-
-        if not lead_data:
-            logger.debug("Лид %s не найден в AmoCRM", lead_id)
-            continue
-
-        # Проверяем правила по приоритету (от высшего к низшему)
-        for rule in rules:
-            try:
-                if evaluate_conditions(rule.conditions, lead_data):
-                    # Лид подходит под правило - применяем стиль
-                    styles[str(lead_id)] = LeadStyle(
-                        text_color=rule.style["text_color"],
-                        background_color=rule.style["background_color"],
-                        matched_rule_id=rule.id,
-                        matched_rule_name=rule.name
-                    )
-                    logger.debug("Лид %s подходит под правило %s", lead_id, rule.id)
-                    break  # Применяем только первое подходящее правило
-            except Exception as e:
-                logger.error("Ошибка при проверке правила %s для лида %s: %s", rule.id, lead_id, e)
-                continue
-
-    logger.info("Применены стили для %s лидов из %s", len(styles), len(request.lead_ids))
     return GetStylesResponse(styles=styles)
 
 
@@ -173,17 +195,25 @@ async def test_rule(request: TestRuleRequest):
     """
     Тестирование правила на конкретных данных лида.
 
+    Отправляет запрос в очередь RabbitMQ и ждёт ответа от worker'а.
     Используется для отладки и проверки условий.
     """
-    try:
-        conditions_dict = request.conditions.model_dump()
-        matches = evaluate_conditions(conditions_dict, request.lead_data)
+    logger.info("HTTP -> RabbitMQ RPC: тестирование правила")
 
-        details = "Условие выполнено" if matches else "Условие не выполнено"
+    response = await broker.publish(
+        {
+            "conditions": request.conditions.model_dump(),
+            "lead_data": request.lead_data,
+        },
+        queue=QueueNames.RULES_TEST,
+        rpc=True,
+        rpc_timeout=RPC_TIMEOUT,
+    )
 
-        logger.info("Тест правила: %s", details)
-        return TestRuleResponse(matches=matches, details=details)
+    if not response.get("success"):
+        raise HTTPException(status_code=400, detail=response.get("error", "Unknown error"))
 
-    except Exception as e:
-        logger.error("Ошибка при тестировании правила: %s", e)
-        raise HTTPException(status_code=500, detail=f"Failed to test rule: {str(e)}")
+    return TestRuleResponse(
+        matches=response["matches"],
+        details=response.get("details", ""),
+    )
