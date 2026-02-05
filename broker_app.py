@@ -2,13 +2,13 @@
 Основной FastStream брокер для запуска воркера.
 
 Запуск:
-    faststream run app.broker_app:app --workers 1
+    faststream run broker_app:app --workers 1
 """
 
 from faststream import FastStream
 
-from app.core.broker.app import broker
-from app.core.logging import setup_logging, logger
+from src.app.core.broker.app import broker
+from src.app.core.logging import setup_logging, logger
 
 # Настраиваем логирование для воркера
 setup_logging(service_name="leads-coloring-worker", environment="production")

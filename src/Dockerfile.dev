@@ -1,15 +1,53 @@
-FROM mirror.gcr.io/python:3.12-slim
+###########
+# BUILDER #
+###########
+FROM python:3.12-slim AS builder
 
-WORKDIR /home
+WORKDIR /usr/src/app
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-RUN apt update
-RUN apt -y install netcat-traditional mariadb-client build-essential
+# Объединяем apt update и install для избежания кэширования устаревших индексов
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
+RUN pip install --upgrade pip
 COPY requirements.txt .
-RUN pip install -r requirements.txt
-RUN pip install "taskiq[reload]==0.11.5"
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requirements.txt
 
-ENTRYPOINT ["/home/entrypoint.app.dev.sh"]
+#########
+# FINAL #
+#########
+
+FROM python:3.12-slim
+
+# Объединяем apt update и install + очистка кэша
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        netcat-traditional \
+        libpq-dev \
+        libpq5 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /home/app
+
+RUN adduser app
+
+ENV HOME=/home
+WORKDIR $HOME
+
+COPY --from=builder /usr/src/app/wheels /wheels
+RUN pip install --no-cache /wheels/*
+
+COPY . $HOME
+
+RUN chown -R app:app $HOME
+
+ENV TZ=Europe/Moscow
+
+USER app
+ENTRYPOINT ["/home/entrypoint.app.sh"]

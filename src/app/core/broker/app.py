@@ -1,23 +1,30 @@
-from taskiq_aio_pika import AioPikaBroker
-from taskiq import TaskiqEvents, TaskiqState
+"""
+Конфигурация FastStream RabbitMQ брокера.
+"""
+
+from faststream.rabbit import RabbitBroker, Channel
+
 from app.core.settings import config
-from app.db import async_session
-from .middlewares.message_id import LogMiddleware
+from app.core.logging import logger
+from app.core.broker.middlewares.logging_middleware import LoggingMiddleware
+from app.core.broker.middlewares.retry_middleware import RetryMiddleware
+from app.core.broker.routers.rules import rules_router
+from app.core.broker.routers.leads import leads_router
+from app.core.broker.routers.health import health_router
 
 
-broker = AioPikaBroker(
-    config.rabbit_cfg.rabbitmq_uri,
-    exchange_name="default",
-    queue_name="default",
-    delayed_message_exchange_plugin=True,
-).with_middlewares(LogMiddleware())
+# Создаем RabbitMQ брокер с настройками
+broker = RabbitBroker(
+    url=config.rabbit_cfg.rabbitmq_uri,
+    logger=logger,
+    middlewares=[
+        RetryMiddleware,  # Сначала retry (внешний слой)
+        LoggingMiddleware,  # Потом logging (внутренний слой)
+    ],
+    default_channel=Channel(prefetch_count=config.worker_cfg.PREFETCH_COUNT),
+)
 
-
-@broker.on_event(TaskiqEvents.WORKER_STARTUP)
-async def startup(state: TaskiqState) -> None:
-    state.sqldb_session = async_session
-
-
-@broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
-async def shutdown(state: TaskiqState) -> None:
-    del state.sqldb_session
+# Подключаем роутеры для обработки сообщений из RabbitMQ
+broker.include_router(rules_router)
+broker.include_router(leads_router)
+broker.include_router(health_router)

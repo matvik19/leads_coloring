@@ -2,7 +2,7 @@ services:
   app:
     build:
       context: ./src
-      dockerfile: Dockerfile.dev
+      dockerfile: src/Dockerfile.dev
     command: python manage.py run-dev-server
     volumes:
       - ./src:/home
@@ -12,22 +12,11 @@ services:
     env_file:
       - .env
 
-  taskiq_scheduler_app:
+  worker_app:
     build:
       context: ./src
-      dockerfile: Dockerfile.dev
-    command: python manage.py run-scheduler
-    volumes:
-      - ./src:/home
-      - ./logs:/logs
-    env_file:
-      - .env
-
-  taskiq_broker_app:
-    build:
-      context: ./src
-      dockerfile: Dockerfile.dev
-    command: python manage.py run-worker --devel=y
+      dockerfile: src/Dockerfile.dev
+    command: python manage.py run-worker -d
     volumes:
       - ./src:/home
       - ./logs:/logs

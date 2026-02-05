@@ -1,97 +1,52 @@
 import logging
-import logging.config
-from starlette_context import context
-from .context import message_id
-from .settings import config
+import sys
+from contextvars import ContextVar
+
+subdomain_var: ContextVar[str] = ContextVar("subdomain", default="unknown")
+request_id_var: ContextVar[str] = ContextVar("request_id", default="unknown")
 
 
-class RequestIdFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        if context.exists() and "X-Request-ID" in context.data:
-            record.request_id = context["X-Request-ID"]
-        else:
-            record.request_id = None
+class ContextFilter(logging.Filter):
+    """Добавляет subdomain и request_id в каждую запись лога"""
+
+    def filter(self, record):
+        record.subdomain = subdomain_var.get()
+        record.request_id = request_id_var.get()
         return True
 
 
-class TaskIdFilter(logging.Filter):
+def setup_logging(service_name: str = "leads-coloring", environment: str = "production"):
+    """
+    Настраивает логирование один раз при старте приложения
+    """
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.request_id = message_id.get()
-        return True
+    logger.handlers.clear()
+
+    context_filter = ContextFilter()
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter(
+        "[%(subdomain)s] [%(request_id)s] %(asctime)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    console_handler.setFormatter(console_formatter)
+    console_handler.addFilter(context_filter)
+    logger.addHandler(console_handler)
+
+    # Отключаем DEBUG логи от сторонних библиотек
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("aiormq").setLevel(logging.WARNING)
+    logging.getLogger("aio_pika").setLevel(logging.WARNING)
+    logging.getLogger("faststream").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+
+    logging.info("Logging configured for service: %s", service_name)
 
 
-logging_config = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "request_id": {
-            "format": "%(asctime)s %(levelname)-8s %(name)-24s %(request_id)-8s %(message)s"
-        },
-    },
-    "handlers": {
-        "web_stdout": {
-            "level": getattr(logging, config.app_cfg.LOGLEVEL, logging.INFO),
-            "class": "logging.StreamHandler",
-            "formatter": "request_id",
-            "filters": [RequestIdFilter()],
-        },
-        "web_file": {
-            "level": getattr(logging, config.app_cfg.LOGLEVEL, logging.INFO),
-            "class": "logging.handlers.RotatingFileHandler",
-            "formatter": "request_id",
-            "filters": [RequestIdFilter()],
-            "filename": "/logs/web.log",
-            "maxBytes": 536870912,
-            "backupCount": 10,
-        },
-        "worker_file": {
-            "level": getattr(logging, config.app_cfg.LOGLEVEL, logging.INFO),
-            "formatter": "request_id",
-            "filters": [TaskIdFilter()],
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": "/logs/worker.log",
-            "maxBytes": 536870912,
-            "backupCount": 10,
-        },
-        "worker_stdout": {
-            "level": getattr(logging, config.app_cfg.LOGLEVEL, logging.INFO),
-            "class": "logging.StreamHandler",
-            "formatter": "request_id",
-            "filters": [TaskIdFilter()],
-        },
-        "scheduler_file": {
-            "level": getattr(logging, config.app_cfg.LOGLEVEL, logging.INFO),
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": "/logs/scheduler.log",
-            "maxBytes": 536870912,
-            "backupCount": 10,
-        },
-        "scheduler_stdout": {
-            "level": getattr(logging, config.app_cfg.LOGLEVEL, logging.INFO),
-            "class": "logging.StreamHandler",
-        },
-    },
-    "loggers": {
-        "app_logger": {
-            "handlers": ["web_stdout", "web_file"],
-            "level": config.app_cfg.LOGLEVEL,
-        },
-        "uvicorn": {"handlers": ["web_stdout", "web_file"], "level": config.app_cfg.LOGLEVEL},
-        "uvicorn.error": {"handlers": ["web_stdout", "web_file"], "level": config.app_cfg.LOGLEVEL},
-        "uvicorn.access": {
-            "handlers": ["web_stdout", "web_file"],
-            "level": config.app_cfg.LOGLEVEL,
-            "propagate": False,
-        },
-        "sqlalchemy.engine.Engine": {"handlers": ["web_stdout"], "level": config.app_cfg.LOGLEVEL},
-        "worker": {
-            "handlers": ["worker_file", "worker_stdout"],
-            "level": config.app_cfg.LOGLEVEL,
-        },
-        "scheduler": {
-            "handlers": ["scheduler_file", "scheduler_stdout"],
-            "level": config.app_cfg.LOGLEVEL,
-        },
-    },
-}
+# Инициализируем логирование
+setup_logging()
+logger = logging.getLogger(__name__)
