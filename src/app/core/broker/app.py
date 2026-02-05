@@ -18,8 +18,8 @@ broker = RabbitBroker(
     url=config.rabbit_cfg.rabbitmq_uri,
     logger=logger,
     middlewares=[
-        RetryMiddleware,  # Сначала retry (внешний слой)
-        LoggingMiddleware,  # Потом logging (внутренний слой)
+        LoggingMiddleware,  # Сначала logging (устанавливает контекст)
+        RetryMiddleware,  # Потом retry
     ],
     default_channel=Channel(prefetch_count=config.worker_cfg.PREFETCH_COUNT),
 )

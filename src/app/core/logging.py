@@ -66,4 +66,5 @@ def setup_logging(
     logging.info("Logging configured for service: %s", service_name)
 
 
-logger = logging.getLogger(__name__)
+# Используем root логгер, чтобы ContextFilter работал везде
+logger = logging.getLogger()
