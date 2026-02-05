@@ -47,6 +47,11 @@ class LoggingMiddleware(BaseMiddleware):
             self._subdomain_token = subdomain_var.set(subdomain)
             self._request_id_token = request_id_var.set(request_id)
 
+            # Debug
+            import sys
+            print(f"MIDDLEWARE SET: subdomain={subdomain}, request_id={request_id}", file=sys.stderr)
+            print(f"MIDDLEWARE GET: subdomain={subdomain_var.get()}, request_id={request_id_var.get()}", file=sys.stderr)
+
             # Получаем имя очереди из routing_key
             queue_name = "unknown"
             routing_key = getattr(self.msg, "routing_key", None)

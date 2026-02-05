@@ -5,14 +5,18 @@
     faststream run app.broker_app:app --workers 1
 """
 
+# ВАЖНО: setup_logging должен быть вызван ДО импорта broker
+from app.core.logging import setup_logging
+
+# Настраиваем логирование для воркера ПЕРВЫМ ДЕЛОМ
+setup_logging(service_name="leads-coloring-worker", environment="production")
+
+# Теперь импортируем остальное
 from faststream import FastStream
 
 from app.core.broker.app import broker
 from app.core.broker.rpc import close_rpc_connection
-from app.core.logging import setup_logging, logger
-
-# Настраиваем логирование для воркера
-setup_logging(service_name="leads-coloring-worker", environment="production")
+from app.core.logging import logger
 
 # Создаем FastStream приложение
 app = FastStream(broker)

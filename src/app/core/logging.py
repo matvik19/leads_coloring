@@ -11,8 +11,13 @@ class ContextFilter(logging.Filter):
     """Добавляет subdomain и request_id в каждую запись лога"""
 
     def filter(self, record):
-        record.subdomain = subdomain_var.get()
-        record.request_id = request_id_var.get()
+        subdomain = subdomain_var.get()
+        request_id = request_id_var.get()
+        record.subdomain = subdomain
+        record.request_id = request_id
+        # Debug: выводим в stderr чтобы не зациклиться
+        # import sys
+        # print(f"FILTER: subdomain={subdomain}, request_id={request_id}", file=sys.stderr)
         return True
 
 
