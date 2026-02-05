@@ -7,7 +7,8 @@
 
 from faststream import FastStream
 
-from app.core.broker.app import broker, rpc_broker
+from app.core.broker.app import broker
+from app.core.broker.rpc import close_rpc_connection
 from app.core.logging import setup_logging, logger
 
 # Настраиваем логирование для воркера
@@ -27,9 +28,6 @@ async def startup_hook():
 @app.after_startup
 async def after_startup_hook():
     """Хук выполняется после успешного старта."""
-    # Подключаем RPC broker для исходящих запросов
-    await rpc_broker.start()
-    logger.info("RPC broker подключен для исходящих запросов")
     logger.info("FastStream воркер успешно запущен")
     logger.info("Слушаем очереди RabbitMQ...")
 
@@ -38,9 +36,9 @@ async def after_startup_hook():
 async def shutdown_hook():
     """Хук выполняется при остановке воркера."""
     logger.info("FastStream воркер останавливается...")
-    # Закрываем RPC broker
-    await rpc_broker.close()
-    logger.info("RPC broker отключен")
+    # Закрываем RPC соединение
+    await close_rpc_connection()
+    logger.info("RPC соединение закрыто")
 
 
 @app.after_shutdown

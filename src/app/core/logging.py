@@ -1,6 +1,7 @@
 import logging
 import sys
 from contextvars import ContextVar
+import logging_loki
 
 subdomain_var: ContextVar[str] = ContextVar("subdomain", default="unknown")
 request_id_var: ContextVar[str] = ContextVar("request_id", default="unknown")
@@ -15,7 +16,9 @@ class ContextFilter(logging.Filter):
         return True
 
 
-def setup_logging(service_name: str = "leads-coloring", environment: str = "production"):
+def setup_logging(
+    service_name: str = "leads-coloring", environment: str = "production"
+):
     """
     Настраивает логирование один раз при старте приложения
     """
@@ -36,6 +39,22 @@ def setup_logging(service_name: str = "leads-coloring", environment: str = "prod
     console_handler.addFilter(context_filter)
     logger.addHandler(console_handler)
 
+    loki_handler = logging_loki.LokiHandler(
+        url="http://loki:3100/loki/api/v1/push",
+        tags={
+            "service": service_name,
+            "environment": environment,
+        },
+        version="1",
+    )
+    loki_handler.setLevel(logging.INFO)
+    loki_formatter = logging.Formatter(
+        "%(subdomain)s | %(request_id)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s"
+    )
+    loki_handler.setFormatter(loki_formatter)
+    loki_handler.addFilter(context_filter)
+    logger.addHandler(loki_handler)
+
     # Отключаем DEBUG логи от сторонних библиотек
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
     logging.getLogger("aiormq").setLevel(logging.WARNING)
@@ -47,6 +66,4 @@ def setup_logging(service_name: str = "leads-coloring", environment: str = "prod
     logging.info("Logging configured for service: %s", service_name)
 
 
-# Инициализируем логирование
-setup_logging()
 logger = logging.getLogger(__name__)
