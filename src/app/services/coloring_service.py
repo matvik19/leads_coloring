@@ -176,7 +176,7 @@ async def delete_rule(
 
 async def update_priorities(
     subdomain: str,
-    priorities: List[PriorityUpdate],
+    priorities: List[Dict[str, Any]],
     session: AsyncSession
 ) -> bool:
     """
@@ -184,7 +184,7 @@ async def update_priorities(
 
     Args:
         subdomain: Субдомен AmoCRM
-        priorities: Список обновлений приоритетов
+        priorities: Список обновлений приоритетов [{"id": 1, "priority": 10}, ...]
         session: Сессия БД
 
     Returns:
@@ -192,9 +192,9 @@ async def update_priorities(
     """
     for priority_update in priorities:
         stmt = update(ColoringRule).where(
-            ColoringRule.id == priority_update.id,
+            ColoringRule.id == priority_update["id"],
             ColoringRule.subdomain == subdomain
-        ).values(priority=priority_update.priority)
+        ).values(priority=priority_update["priority"])
 
         await session.execute(stmt)
 

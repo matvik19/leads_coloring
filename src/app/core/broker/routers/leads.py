@@ -68,10 +68,7 @@ async def handle_get_leads_styles(
             )
         except Exception as e:
             logger.error("Ошибка при получении лидов: %s", e, exc_info=True)
-            return {
-                "success": False,
-                "error": f"Failed to fetch leads: {str(e)}"
-            }
+            return {"success": False, "styles": {}}
 
         # Применяем правила к каждому лиду
         styles = {}
@@ -118,7 +115,4 @@ async def handle_get_leads_styles(
 
     except Exception as e:
         logger.error("Ошибка при получении стилей: %s", e, exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "styles": {}}

@@ -13,7 +13,7 @@ from app.core.broker.routers.leads import leads_router
 from app.core.broker.routers.health import health_router
 
 
-# Создаем RabbitMQ брокер с настройками
+# Основной брокер для получения сообщений (subscribers)
 broker = RabbitBroker(
     url=config.rabbit_cfg.rabbitmq_uri,
     logger=logger,
@@ -22,6 +22,13 @@ broker = RabbitBroker(
         LoggingMiddleware,  # Потом logging (внутренний слой)
     ],
     default_channel=Channel(prefetch_count=config.worker_cfg.PREFETCH_COUNT),
+)
+
+# Отдельный брокер для исходящих RPC запросов (publisher)
+# Используется для запросов к другим сервисам (например, токены)
+rpc_broker = RabbitBroker(
+    url=config.rabbit_cfg.rabbitmq_uri,
+    logger=logger,
 )
 
 # Подключаем роутеры для обработки сообщений из RabbitMQ

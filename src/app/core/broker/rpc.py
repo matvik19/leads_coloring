@@ -1,5 +1,6 @@
 """
 RPC клиент для взаимодействия с внешними сервисами через RabbitMQ.
+Использует отдельный FastStream RPC broker для исходящих запросов.
 """
 
 import asyncio
@@ -22,6 +23,8 @@ async def send_rpc_request_and_wait_for_reply(
 ) -> Dict[str, Any]:
     """
     Отправка RPC запроса в сервис токенов и ожидание ответа.
+
+    Использует rpc_broker (отдельный FastStream broker для исходящих запросов).
 
     Args:
         subdomain: Субдомен AmoCRM для получения токенов
@@ -51,11 +54,11 @@ async def send_rpc_request_and_wait_for_reply(
                     max_retries
                 )
 
-                # Импортируем broker внутри функции, чтобы избежать циклических импортов
-                from app.core.broker.app import broker
+                # Импортируем rpc_broker внутри функции, чтобы избежать циклических импортов
+                from app.core.broker.app import rpc_broker
 
                 # FastStream автоматически обрабатывает correlation_id и reply_to
-                response = await broker.request(
+                response = await rpc_broker.request(
                     message=request_data,
                     queue="tokens_get_user",
                     timeout=timeout,

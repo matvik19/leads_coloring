@@ -62,10 +62,7 @@ async def handle_create_rule(
 
     except Exception as e:
         logger.error("Ошибка при создании правила: %s", e, exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False}
 
 
 @rules_router.subscriber(
@@ -96,24 +93,15 @@ async def handle_update_rule(
 
         if not rule:
             logger.warning("Правило id=%s не найдено", rule_id)
-            return {
-                "success": False,
-                "error": "Rule not found"
-            }
+            return {"success": False}
 
         logger.info("Обновлено правило id=%s для subdomain=%s", rule.id, request.subdomain)
 
-        return {
-            "id": rule.id,
-            "success": True
-        }
+        return {"success": True}
 
     except Exception as e:
         logger.error("Ошибка при обновлении правила: %s", e, exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False}
 
 
 @rules_router.subscriber(
@@ -137,10 +125,7 @@ async def handle_get_rules(
         subdomain = data.get("subdomain")
 
         if not subdomain:
-            return {
-                "success": False,
-                "error": "subdomain is required"
-            }
+            return {"success": False, "rules": []}
 
         # Получение правил
         rules = await get_rules_by_subdomain(subdomain, db_session)
@@ -154,10 +139,7 @@ async def handle_get_rules(
 
     except Exception as e:
         logger.error("Ошибка при получении списка правил: %s", e, exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "rules": []}
 
 
 @rules_router.subscriber(
@@ -182,20 +164,14 @@ async def handle_delete_rule(
         subdomain = data.get("subdomain")
 
         if not rule_id or not subdomain:
-            return {
-                "success": False,
-                "error": "rule_id and subdomain are required"
-            }
+            return {"success": False}
 
         # Удаление правила
         deleted = await delete_rule(rule_id, subdomain, db_session)
 
         if not deleted:
             logger.warning("Правило id=%s не найдено для subdomain=%s", rule_id, subdomain)
-            return {
-                "success": False,
-                "error": "Rule not found"
-            }
+            return {"success": False}
 
         logger.info("Удалено правило id=%s для subdomain=%s", rule_id, subdomain)
 
@@ -203,10 +179,7 @@ async def handle_delete_rule(
 
     except Exception as e:
         logger.error("Ошибка при удалении правила: %s", e, exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False}
 
 
 @rules_router.subscriber(
@@ -231,10 +204,7 @@ async def handle_update_priorities(
         priorities = data.get("priorities", [])
 
         if not subdomain or not priorities:
-            return {
-                "success": False,
-                "error": "subdomain and priorities are required"
-            }
+            return {"success": False}
 
         # Обновление приоритетов
         await update_priorities(subdomain, priorities, db_session)
@@ -245,10 +215,7 @@ async def handle_update_priorities(
 
     except Exception as e:
         logger.error("Ошибка при обновлении приоритетов: %s", e, exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False}
 
 
 @rules_router.subscriber(
@@ -271,10 +238,7 @@ async def handle_test_rule(
         lead_data = data.get("lead_data")
 
         if not conditions or not lead_data:
-            return {
-                "success": False,
-                "error": "conditions and lead_data are required"
-            }
+            return {"success": False, "matches": False, "details": "Missing data"}
 
         # Тестирование условий
         matches = evaluate_conditions(conditions, lead_data)
@@ -290,7 +254,4 @@ async def handle_test_rule(
 
     except Exception as e:
         logger.error("Ошибка при тестировании правила: %s", e, exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "matches": False, "details": "Error"}
