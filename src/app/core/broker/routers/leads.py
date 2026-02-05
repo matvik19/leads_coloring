@@ -32,14 +32,6 @@ async def handle_get_leads_styles(
 ) -> Dict[str, Any]:
     """
     Получение стилей для лидов на основе правил.
-
-    Args:
-        data: Данные из RabbitMQ сообщения (subdomain, lead_ids)
-        db_session: Сессия базы данных (DI)
-        http_session: HTTP клиент с rate limiting (DI)
-
-    Returns:
-        Dict со стилями для лидов
     """
     try:
         # Валидация через Pydantic
